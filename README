@@ -1,0 +1,37 @@
+NETEXEC
+
+Execute command by TCP/Unix connection.
+
+
+HOW TO BUILD
+
+You need C build tools (make and gcc/clang).
+Then run:
+
+	$ make
+
+
+EXAMPLE 1
+
+Run shell by Unix connection (NOTE: this example is dangerous):
+
+	$ ./netexec /tmp/sh.sock -- /bin/sh
+
+Now you can run shell commands from other terminals:
+
+	$ nc -U /tmp/sh.sock
+	ls
+	Makefile
+	README
+	netexec
+	netexec.c
+
+EXAMPLE 2
+
+Forward local connections to TOR using netcat:
+
+	$ ./netexec 127.0.0.1 8080 -- nc -x127.0.0.1:9050 openbsd.org 80
+
+And in an another terminal:
+
+	$ curl 127.0.0.1:8080
