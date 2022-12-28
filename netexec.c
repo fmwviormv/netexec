@@ -13,6 +13,8 @@
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  * PERFORMANCE OF THIS SOFTWARE.
  */
+#define _POSIX_C_SOURCE 200809L
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -43,6 +45,7 @@ const char	*getsocknamestr(int, char *, size_t);
 int
 main(int argc, char **argv)
 {
+	const char	*const progname = argv[0];
 	const char	*host = "127.0.0.1", *port = NULL;
 
 	close(Server);
@@ -69,8 +72,11 @@ main(int argc, char **argv)
 		--argc;
 		++argv;
 	}
-	if (argc < 1 || (port && host[0] == '/'))
-		errx(1, "usage: netexec [host [port]] -- cmd args ...");
+	if (argc < 1 || (port && host[0] == '/')) {
+		fprintf(stderr, "usage: %s [host [port]] -- "
+		    "cmd [arg [...]]\n", progname);
+		return 1;
+	}
 	if (host[0] == '/')
 		listen_unix(host);
 	else
