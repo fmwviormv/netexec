@@ -141,12 +141,13 @@ listen_unix(const char *path)
 {
 	struct sockaddr_un addr;
 	int		 s;
-	const size_t	 path_size = sizeof(addr.sun_path);
+	const size_t	 len = strlen(path);
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
-	if (strlcpy(addr.sun_path, path, path_size) >= path_size)
+	if (len >= sizeof(addr.sun_path))
 		errx(1, "path too long");
+	memcpy(addr.sun_path, path, len + 1);
 	if (unlink(path) == -1 && errno != ENOENT)
 		errx(1, "invalid unix socket path");
 	if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) != Server) {
