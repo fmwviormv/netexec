@@ -14,6 +14,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 #define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -171,9 +172,14 @@ listen_tcp(const char *host, const char *port)
 			err(1, "socket");
 		errx(1, "socket: FATAL");
 	}
+#ifdef SO_REUSEPORT
 	if (setsockopt(s, SOL_SOCKET, SO_REUSEPORT, &reuseport,
 	    sizeof(reuseport)))
 		warn("setsockopt");
+#else
+	if (reuseport)
+		warnx("SO_REUSEPORT is not available");
+#endif
 	for (int i = 0; ; ++i) {
 		if (bind(s, res->ai_addr, res->ai_addrlen) == 0) {
 			if (i > 0) {
