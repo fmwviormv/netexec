@@ -50,9 +50,7 @@ main(int argc, char **argv)
 
 	close(Server);
 	close(Client);
-	if (signal(SIGCHLD, on_signal) == SIG_ERR ||
-	    signal(SIGINT, on_signal) == SIG_ERR ||
-	    signal(SIGTERM, on_signal) == SIG_ERR)
+	if (signal(SIGCHLD, on_signal) == SIG_ERR)
 		err(1, "signal");
 	argc -= 1;
 	argv += 1;
@@ -86,38 +84,29 @@ main(int argc, char **argv)
 		struct sockaddr	 addr;
 		socklen_t	 len = sizeof(addr);
 		const int	 s = accept(Server, &addr, &len);
-		if (s != Client) {
-			if (s != -1) {
-				warnx("accept: bad file descriptor");
-				shutdown(s, SHUT_RDWR);
-				close(s);
-			} else if (errno == EBADF)
-				return 0;
-			else
-				warn("accept");
+		if (s == -1) {
+			if (errno == EINTR)
+				break;
+			err(1, "accept");
+		} else if (s != Client) {
+			warnx("accept: bad file descriptor");
+			if (close(s))
+				warn("close");
+			continue;
 		}
 		switch (fork()) {
 		case -1:
 			warn("fork");
-			shutdown(Client, SHUT_RDWR);
-			close(Client);
 			break;
 		case 0:
-			if (dup2(Client, Server) == -1) {
-				warn("dup2");
-				shutdown(Client, SHUT_RDWR);
-				return 1;
-			}
+			if (dup2(Client, Server) == -1)
+				err(1, "dup2");
 			if (execvp(argv[0], argv) == -1)
-				warn("execvp");
-			else
-				warnx("execvp: returned!");
-			shutdown(Client, SHUT_RDWR);
-			return 1;
-		default:
-			if (close(Client))
-				warn("close");
+				err(1, "execvp");
+			err(1, "execvp: returned!");
 		}
+		if (close(Client))
+			warn("close");
 	}
 	return 0;
 }
@@ -125,20 +114,12 @@ main(int argc, char **argv)
 void
 on_signal(int sigraised)
 {
-	int		 status;
-
-	switch (sigraised) {
-	case SIGCHLD:
+	if (sigraised == SIGCHLD) {
+		int		 status;
 		if (wait(&status) == -1)
 			warn("wait");
-		if (status)
+		else if (status)
 			warnx("child exit code: %d", status);
-		break;
-	case SIGINT:
-	case SIGTERM:
-		shutdown(Server, SHUT_RDWR);
-		close(Server);
-		break;
 	}
 }
 
@@ -171,7 +152,7 @@ void
 listen_tcp(const char *host, const char *port)
 {
 	struct addrinfo	 hints, *res;
-	int		 s, error;
+	int		 s, error, reuseport = 1;
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;
@@ -190,9 +171,27 @@ listen_tcp(const char *host, const char *port)
 			err(1, "socket");
 		errx(1, "socket: FATAL");
 	}
-	for (int i = 0; bind(s, res->ai_addr, res->ai_addrlen); ) {
-		if (errno != EADDRINUSE || ++i >= 60)
+	if (setsockopt(s, SOL_SOCKET, SO_REUSEPORT, &reuseport,
+	    sizeof(reuseport)))
+		warn("setsockopt");
+	for (int i = 0; ; ++i) {
+		if (bind(s, res->ai_addr, res->ai_addrlen) == 0) {
+			if (i > 0) {
+				fputc('\n', stderr);
+				fflush(stderr);
+			}
+			break;
+		} else if (errno != EADDRINUSE || i >= 10) {
+			if (i > 0) {
+				fputc('\n', stderr);
+				fflush(stderr);
+			}
 			err(1, "bind");
+		} else if (i > 0)
+			fputc('.', stderr);
+		else
+			fprintf(stderr, "Address in use");
+		fflush(stderr);
 		sleep(1);
 	}
 	freeaddrinfo(res);
